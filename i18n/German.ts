@@ -80,7 +80,7 @@
     <message>
         <location filename="../gui/mainwindow.py" line="230"/>
         <source>Sensor.Community - Airrohr Flasher (v{version})</source>
-        <translation>Sensor.Community - Airrohr Flasher (v{version})</translation>
+        <translation>Little Yoda -- Flasher (v{version})</translation>
     </message>
     <message>
         <location filename="../gui/mainwindow.py" line="231"/>
@@ -140,7 +140,7 @@
     <message>
         <location filename="../gui/mainwindow.py" line="242"/>
         <source>In case of sensor issues, Serial Monitor can be used to review logs sent by the sensor over USB cable.</source>
-        <translation> Im Fall von Sensorproblemen kann der Serielle Monitor zur Anzeige der Protokolle genutzt werden, die vom Sensor über den USB-Anschluß ausgegeben werden.</translation>
+        <translation>Serieller Monitor, um die Ausgabe des ESP anzeigen zu lassen.</translation>
     </message>
     <message>
         <location filename="../gui/mainwindow.py" line="243"/>
@@ -155,7 +155,7 @@
     <message>
         <location filename="../gui/mainwindow.py" line="245"/>
         <source>&lt;b&gt;Sensor.Community Airrohr Flasher&lt;/b&gt;&lt;br/&gt;Build {build_id}</source>
-        <translation>&lt;b&gt;Sensor.Community Airrohr Flasher&lt;/b&gt;&lt;br/&gt;Build {build_id}</translation>
+        <translation>&lt;b&gt;Little Yoda Flasher&lt;/b&gt;&lt;br/&gt;Build {build_id}</translation>
     </message>
     <message>
         <location filename="../gui/mainwindow.py" line="246"/>
