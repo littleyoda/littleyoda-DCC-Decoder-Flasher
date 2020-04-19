@@ -10,10 +10,11 @@ import zlib
 import logging
 
 import requests
+import serial
 from esptool import ESPLoader, erase_flash
 
 import airrohrFlasher
-from airrohrFlasher.qtvariant import QtGui, QtCore, QtWidgets
+from airrohrFlasher.qtvariant import QtGui, QtCore, QtWidgets, QtSerialPort
 from airrohrFlasher.utils import QuickThread
 from airrohrFlasher.workers import PortDetectThread, FirmwareListThread, \
     ZeroconfDiscoveryThread
@@ -71,12 +72,14 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         # Hide WIP GUI parts...
         self.on_expertModeBox_clicked()
         self.expertModeBox.hide()
-        self.tabWidget.removeTab(self.tabWidget.indexOf(self.serialTab))
+        #self.tabWidget.removeTab(self.tabWidget.indexOf(self.serialTab))
 
         self.uploadProgress.connect(self.on_work_update)
         self.errorSignal.connect(self.on_work_error)
 
         self.cachedir = tempfile.TemporaryDirectory()
+
+        self.serial = None
 
     def show_global_message(self, title, message):
         self.globalMessage.show()
@@ -184,6 +187,45 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             else:
                 others.append(p)
         return prefered, others
+
+    @QtCore.Slot()
+    def on_serialSendButton_clicked(self):
+        # TODO Check if it is connected
+        s = self.serialOutText.text()
+        self.serial.writeData(s.encode('utf-8'))
+        
+
+
+        
+    @QtCore.Slot(bool)
+    def on_serialConnectButton_clicked(self,checked):
+        if not checked:
+            if self.serial:
+                self.serial.close()
+                self.statusbar.showMessage(self.tr("Disconnected."))
+                return
+
+        device = self.boardBox.currentData(ROLE_DEVICE)
+        self.serialTextEdit.setText("")
+        if not device:
+            self.statusbar.showMessage(self.tr("No device selected."))
+            return
+
+        self.serial = QtSerialPort.QSerialPort(device,
+            baudRate=QtSerialPort.QSerialPort.Baud115200,
+            readyRead=self.receive
+        )        
+        if self.serial.open(QtCore.QIODevice.ReadWrite):        
+            self.statusbar.showMessage(self.tr("Connected."))
+        else:
+            self.statusbar.showMessage(self.tr("Error while opening com port."))
+
+    @QtCore.Slot()
+    def receive(self):
+        while self.serial.canReadLine():
+            text = self.serial.readLine().data().decode()
+            text = text.rstrip('\r\n')
+            self.serialTextEdit.append(text)
 
     @QtCore.Slot()
     def on_uploadButton_clicked(self):
