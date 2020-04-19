@@ -38,7 +38,7 @@ exe = EXE(pyz,
           a.binaries,
           a.zipfiles,
           a.datas,
-          name='airrohr-flasher',
+          name='littleyoda-DCC-Decoder-Flasher',
           debug=False,
           strip=False,
           upx=True,
@@ -48,6 +48,6 @@ exe = EXE(pyz,
 
 # This is used on MacOS only
 app = BUNDLE(exe,
-             name='Sensor.Community Airrohr Flasher.app',
+             name='littleyoda-DCC-Decoder-Flasher.app',
              icon='assets/logo.icns',
              bundle_identifier=None)

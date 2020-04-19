@@ -20,7 +20,7 @@
    <string>Sensor.Community - Airrohr Flasher (v{version})</string>
   </property>
   <property name="windowIcon">
-   <iconset>
+  <iconset>
     <normaloff>../assets/logo.png</normaloff>../assets/logo.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
@@ -209,7 +209,8 @@
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="discoveryTab">
+<!--
+       <widget class="QWidget" name="discoveryTab">
        <attribute name="title">
         <string>Discovery</string>
        </attribute>
@@ -254,6 +255,7 @@
         </item>
        </layout>
       </widget>
+      -->
       <widget class="QWidget" name="serialTab">
        <attribute name="title">
         <string>Serial Monitor</string>

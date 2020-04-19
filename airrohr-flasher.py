@@ -127,11 +127,8 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         """Loads available firmware versions into versionbox widget"""
 
         for fname in files:
-            if not fname.endswith('.bin'):
-                continue
-
-            item = QtGui.QStandardItem(fname)
-            item.setData(UPDATE_REPOSITORY + fname, ROLE_DEVICE)
+            item = QtGui.QStandardItem(fname[0] + " (" + fname[1] + ")");
+            item.setData(fname[2], ROLE_DEVICE)
             self.versionBox.model().appendRow(item)
 
         self.statusbar.clearMessage()

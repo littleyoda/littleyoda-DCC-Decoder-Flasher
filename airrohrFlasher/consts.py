@@ -4,10 +4,11 @@ from .qtvariant import QtCore
 
 
 # Firmware update repository
-UPDATE_REPOSITORY = 'https://firmware.sensor.community/airrohr/update/'
+UPDATE_REPOSITORY = 'https://www.open4me.de/service/littleyoda-DCC-Decoder-Flasher/flash.csv'
+
 
 # URI prefixes (protocol parts, essentially) to be downloaded using requests
-ALLOWED_PROTO = ('http://', 'https://')
+ALLOWED_PROTO = ('https://')
 
 # vid/pid pairs of known NodeMCU/ESP8266 development boards
 PREFERED_PORTS = [
