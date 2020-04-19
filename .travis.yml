@@ -32,3 +32,13 @@ script:
       make deps dmg
     ;
     fi
+
+
+deploy:
+  - provider: pages
+    local_dir: /home/travis/build/littleyoda/littleyoda-DCC-Decoder-Flasher/dist/
+    skip_cleanup: true
+    github_token: $GITHUB_TOKEN
+    keep_history: false
+    on:
+      repo: littleyoda/littleyoda-DCC-Decoder-Flasher
