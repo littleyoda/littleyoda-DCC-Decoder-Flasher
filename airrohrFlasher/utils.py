@@ -1,17 +1,22 @@
 import requests
 import re
 import logging
-
+import csv
 from .qtvariant import QtCore
+import urllib.request
+from contextlib import closing
 
 
-file_index_re = re.compile(r'<a href="([^"]*)">([^<]*)</a>')
+#file_index_re = re.compile(r'<a href="([^"]*)">([^<]*)</a>')
 
 
-def indexof(path):
+def indexof(url):
     """Returns list of filenames parsed off "Index of" page"""
-    resp = requests.get(path)
-    return [a for a, b in file_index_re.findall(resp.text) if a == b]
+    with closing(requests.get(url, stream=True)) as r:
+        f = (line.decode('utf-8') for line in r.iter_lines())
+        reader = csv.reader(f, delimiter='|', quotechar='"')
+        data = [row for row in reader if len(row) > 0]
+    return data;
 
 
 class QuickThread(QtCore.QThread):
