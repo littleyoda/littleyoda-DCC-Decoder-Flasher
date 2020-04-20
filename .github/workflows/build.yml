@@ -5,7 +5,6 @@ name: Bulid on Linux and Windows
 
 on:
   push:
-    branches: [ master ]
     tags:
       - v*
 
