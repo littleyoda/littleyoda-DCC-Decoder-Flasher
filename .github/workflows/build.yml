@@ -6,8 +6,8 @@ name: Bulid on Linux and Windows
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    tags:
+      - v*
 
 jobs:
   buildLinux:
@@ -35,7 +35,7 @@ jobs:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: dist/littleyoda-DCC-Decoder-Flasher
         asset_name: Linux
-        tag: build
+        tag: ${{ github.ref }} 
 
   buildWindows:
 
@@ -56,4 +56,4 @@ jobs:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: dist\littleyoda-DCC-Decoder-Flasher.exe
         asset_name: Windows
-        tag: build
+        tag: ${{ github.ref }} 
