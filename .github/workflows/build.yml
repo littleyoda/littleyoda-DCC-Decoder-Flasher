@@ -33,7 +33,7 @@ jobs:
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: dist/littleyoda-DCC-Decoder-Flasher
-        asset_name: Linux
+        asset_name: Linux_littleyoda_flasher
         tag: ${{ github.ref }} 
 
   buildWindows:
@@ -54,5 +54,5 @@ jobs:
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: dist\littleyoda-DCC-Decoder-Flasher.exe
-        asset_name: Windows
+        asset_name: Windows_littleyoda_flasher.exe
         tag: ${{ github.ref }} 
