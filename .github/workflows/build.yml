@@ -1,0 +1,58 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Bulid on Linux and Windows
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  buildLinux:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+    - name: Install
+      run: |
+        cat /etc/lsb-release 
+        sudo apt-get update -qq
+        sudo apt-get install -qq qtbase5-dev qtdeclarative5-dev libqt5webkit5-dev qt5-default
+        sudo apt-get install qttools5-dev-tools make
+    - name: Make
+      run: |
+        make deps dist
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v1-release
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist/littleyoda-DCC-Decoder-Flasher
+        asset_name: Linux_littleyoda_flasher
+        tag: ${{ github.ref }} 
+
+  buildWindows:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+    - name: Make
+      run: |
+        deploy/windows-build.bat
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v1-release
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist\littleyoda-DCC-Decoder-Flasher.exe
+        asset_name: Windows_littleyoda_flasher.exe
+        tag: ${{ github.ref }} 
