@@ -29,17 +29,13 @@ jobs:
     - name: Make
       run: |
         make deps dist
-    - uses: actions/upload-artifact@v1
-      with:
-        name: Linux_Version
-        path: dist/littleyoda-DCC-Decoder-Flasher
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v1-release
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: dist/littleyoda-DCC-Decoder-Flasher
         asset_name: Linux
-        tag: ${{ github.ref }}        
+        tag: build
 
   buildWindows:
 
@@ -54,7 +50,10 @@ jobs:
     - name: Make
       run: |
         deploy/windows-build.bat
-    - uses: actions/upload-artifact@v1
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v1-release
       with:
-        name: Windows Version
-        path: dist\littleyoda-DCC-Decoder-Flasher.exe
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist\littleyoda-DCC-Decoder-Flasher.exe
+        asset_name: Linux
+        tag: build
