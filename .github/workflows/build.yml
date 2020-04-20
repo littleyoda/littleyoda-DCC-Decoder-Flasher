@@ -6,7 +6,7 @@ name: Bulid on Linux and Windows
 on:
   push:
     tags:
-      - v*
+      - *.*.*
 
 jobs:
   buildLinux:
