@@ -8,21 +8,26 @@ import tempfile
 import hashlib
 import zlib
 import logging
+import re
 
 import requests
+from requests.auth import HTTPBasicAuth
 import serial
 from esptool import ESPLoader, erase_flash
 
 import airrohrFlasher
+
 from airrohrFlasher.qtvariant import QtGui, QtCore, QtWidgets, QtSerialPort
+from PyQt5.QtWidgets import QTableWidget,QTableWidgetItem
+from PyQt5.QtCore import Qt
 from airrohrFlasher.utils import QuickThread
 from airrohrFlasher.workers import PortDetectThread, FirmwareListThread, \
-    ZeroconfDiscoveryThread
+    ZeroconfDiscoveryThread, LogListenerThread
 
 from gui import mainwindow
 
 from airrohrFlasher.consts import UPDATE_REPOSITORY, ALLOWED_PROTO, \
-    PREFERED_PORTS, ROLE_DEVICE, DRIVERS_URL
+    PREFERED_PORTS, ROLE_DEVICE, DRIVERS_URL, ROLE_DNSSD_ADDR,ROLE_DNSSD_INFO, ROLE_DNSSD_NAME
 
 if getattr(sys, 'frozen', False):
     RESOURCES_PATH = sys._MEIPASS
@@ -55,10 +60,13 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.statusbar.showMessage(self.tr("Loading firmware list..."))
 
         self.versionBox.clear()
+        self.DTversionBox.clear()
         self.firmware_list = FirmwareListThread()
         self.firmware_list.listLoaded.connect(self.populate_versions)
         self.firmware_list.error.connect(self.on_work_error)
         self.firmware_list.start()
+
+        self.enableDiscoveryButton(False)
 
         self.port_detect = PortDetectThread()
         self.port_detect.portsUpdate.connect(self.populate_boards)
@@ -80,6 +88,18 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.cachedir = tempfile.TemporaryDirectory()
 
         self.serial = None
+
+
+        self.logTable.setHorizontalHeaderLabels(['Zeit', 'IP', 'Message'])
+        header = self.logTable.horizontalHeader()       
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+
+        self.logger = LogListenerThread()
+        self.logger.logReceived.connect(self.on_logmessage_received)
+        self.logger.start()
+
 
     def show_global_message(self, title, message):
         self.globalMessage.show()
@@ -133,6 +153,10 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             item = QtGui.QStandardItem(fname[0] + " (" + fname[1] + ")");
             item.setData(fname[2], ROLE_DEVICE)
             self.versionBox.model().appendRow(item)
+
+            item2 = QtGui.QStandardItem(fname[0] + " (" + fname[1] + ")");
+            item2.setData(fname[2], ROLE_DEVICE)
+            self.DTversionBox.model().appendRow(item2)
 
         self.statusbar.clearMessage()
 
@@ -383,27 +407,134 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.zeroconf_discovery.stop()
 
         self.zeroconf_discovery = ZeroconfDiscoveryThread()
-        self.zeroconf_discovery.deviceDiscovered.connect(
-            self.on_zeroconf_discovered)
+        self.zeroconf_discovery.deviceDiscovered.connect(self.on_zeroconf_discovered)
         self.zeroconf_discovery.start()
+        self.discoveryList.setRowCount(0)
+        self.discoveryList.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustToContents)
+        self.discoveryList.setHorizontalHeaderLabels(['IP', 'Name', 'Version'])
+        header = self.discoveryList.horizontalHeader()
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+
+    def on_logmessage_received(self, addr, data):
+        print(data)
+        print(addr)
+        rowPosition = 0 # self.logTable.rowCount()
+        self.logTable.insertRow(rowPosition)
+
+        self.logTable.setItem(rowPosition , 0, QTableWidgetItem(""))
+        self.logTable.setItem(rowPosition , 1, QTableWidgetItem(data))
+        self.logTable.setItem(rowPosition , 2, QTableWidgetItem(addr))
+
 
     def on_zeroconf_discovered(self, name, address, info):
         """Called on every zeroconf discovered device"""
-        if (name.lower().startswith('feinstaubsensor')
-                or name.lower().startswith('nam')
-                or name.lower().startswith('smogomierz')
-                or name.lower().startswith('airrohr')):
-            item = QtWidgets.QListWidgetItem('{}: {}'.format(address, name.split('.')[0]))
-            item.setData(ROLE_DEVICE, 'http://{}:{}'.format(address, info.port))
-            self.discoveryList.addItem(item)
+        if (name.lower().startswith('ly-dcc-')):
+            rowPosition = self.discoveryList.rowCount()
+            self.discoveryList.insertRow(rowPosition)
 
-    @QtCore.Slot(QtWidgets.QListWidgetItem)
-    def on_discoveryList_itemDoubleClicked(self, index):
-        QtGui.QDesktopServices.openUrl(QtCore.QUrl(index.data(ROLE_DEVICE)))
+            data = QTableWidgetItem(address)
+            data.setData(ROLE_DNSSD_ADDR, address)
+            data.setData(ROLE_DNSSD_NAME, name)
+            data.setData(ROLE_DNSSD_INFO, info)
+            self.discoveryList.setItem(rowPosition , 0, data)
+            self.discoveryList.setItem(rowPosition , 1, QTableWidgetItem(name.split('.')[0]))
+            self.discoveryList.setItem(rowPosition , 2, QTableWidgetItem(info.properties.get(b"Version").decode('utf-8')))
+
+    def enableDiscoveryButton(self, enabled):
+        self.discoveryBrowser.setEnabled(enabled)
+        self.uploadOverTheAirButton.setEnabled(enabled)
+        self.DTversionBox.setEnabled(enabled)
+        self.enableLoggingButton.setEnabled(enabled)
+
+
+
+    @QtCore.Slot()
+    def on_uploadOverTheAirButton_clicked(self):
+        try:
+            progress = self.uploadProgress
+            version = self.DTversionBox.currentText()
+            sel = self.DTversionBox.model().item(
+                self.DTversionBox.currentIndex())
+            if sel:
+                orig_version = sel.text()
+            else:
+                orig_version = ''
+
+            if version == orig_version:
+                # Editable combobox has been unchanged
+                binary_uri = self.DTversionBox.currentData(ROLE_DEVICE)
+            elif version.startswith(ALLOWED_PROTO):
+                # User has provided a download URL
+                binary_uri = version
+            elif os.path.exists(version):
+                binary_uri = version
+            else:
+                self.statusbar.showMessage(self.tr("Invalid version / file does not exist"))
+                return
+        
+            if binary_uri.startswith(ALLOWED_PROTO):
+                binary_uri = self.cache_download(progress, binary_uri)
+
+            QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
+            data = self.discoveryList.selectionModel().selectedRows()[0]
+            url = "http://"  + data.data(ROLE_DNSSD_ADDR) + "/firmware" 
+            auth=HTTPBasicAuth('admin', 'admin')
+            files = {'file': open(binary_uri,'rb')}
+            values = {}
+            progress.emit(self.tr('Uploading...'), 1)
+            r = requests.post(url, files=files, data=values,auth=auth)
+            if (r.status_code == 200):
+                string = re.sub('<.*?>', '', r.text)
+                progress.emit(self.tr("Finish. {text}").format(text=string), 100)
+            else:
+                progress.emit(self.tr('Error {code} : {text}').format(code = str(status_code), text = r.text), 1)
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor() 
+
+    @QtCore.Slot()
+    def on_discoveryBrowser_clicked(self):
+        data = self.discoveryList.selectionModel().selectedRows()[0]
+        url = "http://"  + data.data(ROLE_DNSSD_ADDR) 
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
+
+    @QtCore.Slot()
+    def on_enableLoggingButton_clicked(self):
+        data = self.discoveryList.selectionModel().selectedRows()[0]
+        url = "http://"  + data.data(ROLE_DNSSD_ADDR) + "/set?id=sys&key=log&value=bcast"
+        r = requests.get(url)
+        if (r.status_code == 200):
+            self.statusbar.showMessage(self.tr("Started."))
+        else:
+            self.statusbar.showMessage(self.tr('Error {code} : {text}').format(code = str(status_code), text = r.text))
+        
+
+
+
+    @QtCore.Slot()
+    def on_discoveryList_itemSelectionChanged(self):
+        rows = self.discoveryList.selectionModel().selectedRows()
+        self.enableDiscoveryButton(len(rows) > 0)
+
+    @QtCore.Slot()
+    def on_eraseButton_clicked(self):
+        self.statusbar.clearMessage()
+        device = self.boardBox.currentData(ROLE_DEVICE)
+
+        if not device:
+            self.statusbar.showMessage(self.tr("No device selected."))
+            return
+
+        if self.erase_board.running():
+            self.statusbar.showMessage(self.tr("Erasing in progress..."))
+            return
+
+        self.erase_board(self.uploadProgress, device,
+                         error=self.errorSignal)
 
     @QtCore.Slot()
     def on_discoveryRefreshButton_clicked(self):
-        self.discoveryList.clear()
         self.discovery_start()
 
 

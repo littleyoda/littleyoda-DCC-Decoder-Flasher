@@ -4,7 +4,7 @@ import socket
 import serial
 import serial.tools.list_ports
 import zeroconf
-
+import socket
 from .qtvariant import QtCore
 from .utils import indexof, QuickThread
 from .consts import UPDATE_REPOSITORY
@@ -58,3 +58,18 @@ class ZeroconfDiscoveryThread(QuickThread):
     def stop(self):
         if self.browser:
             self.browser.cancel()
+
+
+
+class LogListenerThread(QuickThread):
+    logReceived = QtCore.Signal(str, str)
+#    deviceDiscovered = QtCore.Signal(str, str, object)
+    #browser = None
+
+    def target(self):
+        serverSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        serverSock.bind(("0.0.0.0", 5514))
+        while True:
+                data, addr = serverSock.recvfrom(1024) # buffer size is 1024 bytes   
+                self.logReceived.emit(data.decode("iso8859"), addr[0])
+

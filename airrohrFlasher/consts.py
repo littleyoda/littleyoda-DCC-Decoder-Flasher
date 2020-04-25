@@ -20,6 +20,9 @@ PREFERED_PORTS = [
 ]
 
 ROLE_DEVICE = QtCore.Qt.UserRole + 1
+ROLE_DNSSD_NAME = QtCore.Qt.UserRole + 2
+ROLE_DNSSD_ADDR = QtCore.Qt.UserRole + 3
+ROLE_DNSSD_INFO = QtCore.Qt.UserRole + 4
 
 if sys.platform.startswith('darwin'):
     DRIVERS_URL = 'http://www.wch.cn/downloads/CH341SER_MAC_ZIP.html'
