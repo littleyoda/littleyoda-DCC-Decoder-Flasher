@@ -13,20 +13,24 @@ from .consts import UPDATE_REPOSITORY
 class PortDetectThread(QuickThread):
     interval = 1.0
     portsUpdate = QtCore.Signal([list])
+    ports = None
 
     def target(self):
         """Checks list of available ports and emits signal when necessary"""
 
-        ports = None
         while True:
             new_ports = serial.tools.list_ports.comports()
 
-            if ports is None or [p.name for p in ports] != [p.name for p in new_ports]:
+            if self.ports is None or [p.name for p in self.ports] != [p.name for p in new_ports]:
                 self.portsUpdate.emit(new_ports)
 
             time.sleep(self.interval)
 
-            ports = new_ports
+            self.ports = new_ports
+
+    def restart(self):
+        if not self.ports is None:
+                self.portsUpdate.emit(self.ports)
 
 
 class FirmwareListThread(QuickThread):

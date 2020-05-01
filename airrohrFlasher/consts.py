@@ -4,7 +4,7 @@ from .qtvariant import QtCore
 
 
 # Firmware update repository
-UPDATE_REPOSITORY = 'https://www.open4me.de/service/littleyoda-DCC-Decoder-Flasher/flash.csv'
+UPDATE_REPOSITORY = 'https://raw.githubusercontent.com/littleyoda/littleyoda-DCC-Decoder/flashinfo/flash.json'
 
 
 # URI prefixes (protocol parts, essentially) to be downloaded using requests
@@ -20,9 +20,12 @@ PREFERED_PORTS = [
 ]
 
 ROLE_DEVICE = QtCore.Qt.UserRole + 1
-ROLE_DNSSD_NAME = QtCore.Qt.UserRole + 2
-ROLE_DNSSD_ADDR = QtCore.Qt.UserRole + 3
-ROLE_DNSSD_INFO = QtCore.Qt.UserRole + 4
+DATA_NAME = QtCore.Qt.UserRole + 2
+DATA_ADDR = QtCore.Qt.UserRole + 3
+DATA_INFO = QtCore.Qt.UserRole + 4
+TYP_REMOTE = QtCore.Qt.UserRole + 5
+TYP_USB = QtCore.Qt.UserRole + 6
+TYP_UNKNOWN = QtCore.Qt.UserRole + 7
 
 if sys.platform.startswith('darwin'):
     DRIVERS_URL = 'http://www.wch.cn/downloads/CH341SER_MAC_ZIP.html'

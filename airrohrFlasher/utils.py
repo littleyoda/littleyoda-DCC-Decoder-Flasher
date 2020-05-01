@@ -2,6 +2,8 @@ import requests
 import re
 import logging
 import csv
+import urllib
+import json
 from .qtvariant import QtCore
 import urllib.request
 from contextlib import closing
@@ -11,12 +13,10 @@ from contextlib import closing
 
 
 def indexof(url):
-    """Returns list of filenames parsed off "Index of" page"""
-    with closing(requests.get(url, stream=True)) as r:
-        f = (line.decode('utf-8') for line in r.iter_lines())
-        reader = csv.reader(f, delimiter='|', quotechar='"')
-        data = [row for row in reader if len(row) > 0]
-    return data;
+    r = requests.get(url=url)
+    json = r.json();
+    data = [ [item['board'], item['version'], item['url']] for item in json['firmware']]
+    return data
 
 
 class QuickThread(QtCore.QThread):

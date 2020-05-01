@@ -18,7 +18,7 @@ from esptool import ESPLoader, erase_flash
 import airrohrFlasher
 
 from airrohrFlasher.qtvariant import QtGui, QtCore, QtWidgets, QtSerialPort
-from PyQt5.QtWidgets import QTableWidget,QTableWidgetItem
+from PyQt5.QtWidgets import QTableWidget,QTableWidgetItem,QFileDialog,QStyle
 from PyQt5.QtCore import Qt
 from airrohrFlasher.utils import QuickThread
 from airrohrFlasher.workers import PortDetectThread, FirmwareListThread, \
@@ -27,7 +27,7 @@ from airrohrFlasher.workers import PortDetectThread, FirmwareListThread, \
 from gui import mainwindow
 
 from airrohrFlasher.consts import UPDATE_REPOSITORY, ALLOWED_PROTO, \
-    PREFERED_PORTS, ROLE_DEVICE, DRIVERS_URL, ROLE_DNSSD_ADDR,ROLE_DNSSD_INFO, ROLE_DNSSD_NAME
+    PREFERED_PORTS, ROLE_DEVICE, DRIVERS_URL, DATA_ADDR,DATA_INFO, DATA_NAME, TYP_REMOTE, TYP_USB, TYP_UNKNOWN
 
 if getattr(sys, 'frozen', False):
     RESOURCES_PATH = sys._MEIPASS
@@ -60,7 +60,6 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.statusbar.showMessage(self.tr("Loading firmware list..."))
 
         self.versionBox.clear()
-        self.DTversionBox.clear()
         self.firmware_list = FirmwareListThread()
         self.firmware_list.listLoaded.connect(self.populate_versions)
         self.firmware_list.error.connect(self.on_work_error)
@@ -77,10 +76,6 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
         self.globalMessage.hide()
 
-        # Hide WIP GUI parts...
-        self.on_expertModeBox_clicked()
-        self.expertModeBox.hide()
-        #self.tabWidget.removeTab(self.tabWidget.indexOf(self.serialTab))
 
         self.uploadProgress.connect(self.on_work_update)
         self.errorSignal.connect(self.on_work_error)
@@ -100,6 +95,11 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.logger.logReceived.connect(self.on_logmessage_received)
         self.logger.start()
 
+        self.addIcon(self.fileopenButton, "SP_FileDialogStart")
+        self.addIcon(self.discoveryRefreshButton, "SP_BrowserReload")
+
+    def addIcon(self, widget, iconname):
+        widget.setIcon(self.style().standardIcon(getattr(QStyle, iconname)))        
 
     def show_global_message(self, title, message):
         self.globalMessage.show()
@@ -154,30 +154,33 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             item.setData(fname[2], ROLE_DEVICE)
             self.versionBox.model().appendRow(item)
 
-            item2 = QtGui.QStandardItem(fname[0] + " (" + fname[1] + ")");
-            item2.setData(fname[2], ROLE_DEVICE)
-            self.DTversionBox.model().appendRow(item2)
-
         self.statusbar.clearMessage()
 
     def populate_boards(self, ports):
         """Populates board selection combobox from list of pyserial
         ListPortInfo objects"""
 
-        self.boardBox.clear()
+        #self.boardBox.clear()
 
         prefered, others = self.group_ports(ports)
 
         for b in prefered:
-            item = QtGui.QStandardItem(
-                '{0.description} ({0.device})'.format(b))
-            item.setData(b.device, ROLE_DEVICE)
-            self.boardBox.model().appendRow(item)
+            rowPosition = self.discoveryList.rowCount()
+            self.discoveryList.insertRow(rowPosition)
+            data = QTableWidgetItem(b.device)
+            data.setData(ROLE_DEVICE, TYP_USB)
+            data.setData(DATA_ADDR, b.device)
+            data.setData(DATA_NAME, b.description)
+            data.setData(DATA_INFO, "")
+            self.discoveryList.setItem(rowPosition , 0, data)
+            self.discoveryList.setItem(rowPosition , 1, QTableWidgetItem(b.description))
+            self.discoveryList.setItem(rowPosition , 2, QTableWidgetItem(""))
 
-        if not prefered:
-            sep = QtGui.QStandardItem(self.tr('No boards found'))
-            sep.setEnabled(False)
-            self.boardBox.model().appendRow(sep)
+    #TODO
+    #     if not prefered:
+#            sep = QtGui.QStandardItem(self.tr('No boards found'))
+ ##           sep.setEnabled(False)
+   #         self.boardBox.model().appendRow(sep)
 
             # No prefered boards has been found so far and there is a
             # suggested driver download URL available
@@ -190,16 +193,16 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.globalMessage.hide()
             self.boards_detected = True
 
-        if others:
-            sep = QtGui.QStandardItem(self.tr('Others...'))
-            sep.setEnabled(False)
-            self.boardBox.model().appendRow(sep)
+        # if others:
+        #     sep = QtGui.QStandardItem(self.tr('Others...'))
+        #     sep.setEnabled(False)
+        #     self.boardBox.model().appendRow(sep)
 
-        for b in others:
-            item = QtGui.QStandardItem(
-                '{0.description} ({0.device})'.format(b))
-            item.setData(b.device, ROLE_DEVICE)
-            self.boardBox.model().appendRow(item)
+        # for b in others:
+        #     item = QtGui.QStandardItem(
+        #         '{0.description} ({0.device})'.format(b))
+        #     item.setData(b.device, ROLE_DEVICE)
+        #     self.boardBox.model().appendRow(item)
 
     def group_ports(self, ports):
         prefered = []
@@ -217,10 +220,14 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         # TODO Check if it is connected
         s = self.serialOutText.text()
         self.serial.writeData(s.encode('utf-8'))
+        self.serialOutText.setText("")
         
+    @QtCore.Slot()
+    def on_serialOutText_returnPressed(self):
+        s = self.serialOutText.text()
+        self.serial.writeData(s.encode('utf-8'))
+        self.serialOutText.setText("")
 
-
-        
     @QtCore.Slot(bool)
     def on_serialConnectButton_clicked(self,checked):
         if not checked:
@@ -229,7 +236,8 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                 self.statusbar.showMessage(self.tr("Disconnected."))
                 return
 
-        device = self.boardBox.currentData(ROLE_DEVICE)
+        data = self.discoveryList.selectionModel().selectedRows()[0]
+        device = data.data(DATA_ADDR)
         self.serialTextEdit.setText("")
         if not device:
             self.statusbar.showMessage(self.tr("No device selected."))
@@ -252,46 +260,91 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.serialTextEdit.append(text)
 
     @QtCore.Slot()
-    def on_uploadButton_clicked(self):
+    def on_flashButton_clicked(self):
         self.statusbar.clearMessage()
 
-        device = self.boardBox.currentData(ROLE_DEVICE)
-        version = self.versionBox.currentText()
+        data = self.discoveryList.selectionModel().selectedRows()[0]
+        typ = data.data(ROLE_DEVICE)
+        if (typ == TYP_USB):
+            device = data.data(DATA_ADDR)
+            version = self.versionBox.currentText()
 
-        if not device:
-            self.statusbar.showMessage(self.tr("No device selected."))
-            return
+            if not device:
+                self.statusbar.showMessage(self.tr("No device selected."))
+                return
 
-        if not version:
-            self.statusbar.showMessage(self.tr("No version selected."))
-            return
+            if not version:
+                self.statusbar.showMessage(self.tr("No version selected."))
+                return
 
-        sel = self.versionBox.model().item(
-            self.versionBox.currentIndex())
-        if sel:
-            orig_version = sel.text()
-        else:
-            orig_version = ''
+            sel = self.versionBox.model().item(
+                self.versionBox.currentIndex())
+            if sel:
+                orig_version = sel.text()
+            else:
+                orig_version = ''
 
-        if version == orig_version:
-            # Editable combobox has been unchanged
-            binary_uri = self.versionBox.currentData(ROLE_DEVICE)
-        elif version.startswith(ALLOWED_PROTO):
-            # User has provided a download URL
-            binary_uri = version
-        elif os.path.exists(version):
-            binary_uri = version
-        else:
-            self.statusbar.showMessage(self.tr(
-                "Invalid version / file does not exist"))
-            return
+            if version == orig_version:
+                # Editable combobox has been unchanged
+                binary_uri = self.versionBox.currentData(ROLE_DEVICE)
+            elif version.startswith(ALLOWED_PROTO):
+                # User has provided a download URL
+                binary_uri = version
+            elif os.path.exists(version):
+                binary_uri = version
+            else:
+                self.statusbar.showMessage(self.tr(
+                    "Invalid version / file does not exist"))
+                return
 
-        if self.flash_board.running():
-            self.statusbar.showMessage(self.tr("Work in progess..."))
-            return
+            if self.flash_board.running():
+                self.statusbar.showMessage(self.tr("Work in progess..."))
+                return
 
-        self.flash_board(self.uploadProgress, device, binary_uri,
-                         error=self.errorSignal)
+            self.flash_board(self.uploadProgress, device, binary_uri,
+                            error=self.errorSignal)
+
+        if (typ == TYP_REMOTE):
+            try:
+                progress = self.uploadProgress
+                version = self.versionBox.currentText()
+                sel = self.versionBox.model().item(
+                    self.versionBox.currentIndex())
+                if sel:
+                    orig_version = sel.text()
+                else:
+                    orig_version = ''
+
+                if version == orig_version:
+                    # Editable combobox has been unchanged
+                    binary_uri = self.versionBox.currentData(ROLE_DEVICE)
+                elif version.startswith(ALLOWED_PROTO):
+                    # User has provided a download URL
+                    binary_uri = version
+                elif os.path.exists(version):
+                    binary_uri = version
+                else:
+                    self.statusbar.showMessage(self.tr("Invalid version / file does not exist"))
+                    return
+            
+                if binary_uri.startswith(ALLOWED_PROTO):
+                    binary_uri = self.cache_download(progress, binary_uri)
+
+                QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
+                url = "http://"  + data.data(DATA_ADDR) + "/firmware" 
+                auth=HTTPBasicAuth('admin', 'admin')
+                files = {'file': open(binary_uri,'rb')}
+                values = {}
+                progress.emit(self.tr('Uploading...'), 1)
+                r = requests.post(url, files=files, data=values,auth=auth)
+                if (r.status_code == 200):
+                    string = re.sub('<.*?>', '', r.text)
+                    progress.emit(self.tr("Finish. {text}").format(text=string), 100)
+                else:
+                    progress.emit(self.tr('Error {code} : {text}').format(code = str(status_code), text = r.text), 1)
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor() 
+
 
     def cache_download(self, progress, binary_uri):
         """Downloads and caches file with status reports via Qt Signals"""
@@ -336,11 +389,8 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
     @QtCore.Slot()
     def on_eraseButton_clicked(self):
         self.statusbar.clearMessage()
-        device = self.boardBox.currentData(ROLE_DEVICE)
-
-        if not device:
-            self.statusbar.showMessage(self.tr("No device selected."))
-            return
+        data = self.discoveryList.selectionModel().selectedRows()[0]
+        device = data.data(DATA_ADDR)
 
         if self.erase_board.running():
             self.statusbar.showMessage(self.tr("Erasing in progress..."))
@@ -394,12 +444,6 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
         esp.flash_finish(True)
 
-    @QtCore.Slot()
-    def on_expertModeBox_clicked(self):
-        self.expertForm.setVisible(self.expertModeBox.checkState())
-        # self.centralwidget.setFixedHeight(
-        #     self.centralwidget.sizeHint().height())
-        # self.setFixedHeight(self.sizeHint().height())
 
     # Zeroconf page
     def discovery_start(self):
@@ -430,112 +474,74 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
     def on_zeroconf_discovered(self, name, address, info):
         """Called on every zeroconf discovered device"""
-        if (name.lower().startswith('ly-dcc-')):
+        try:
+         if (name.lower().startswith('ly-dcc-')):
             rowPosition = self.discoveryList.rowCount()
             self.discoveryList.insertRow(rowPosition)
 
             data = QTableWidgetItem(address)
-            data.setData(ROLE_DNSSD_ADDR, address)
-            data.setData(ROLE_DNSSD_NAME, name)
-            data.setData(ROLE_DNSSD_INFO, info)
+            data.setData(ROLE_DEVICE, TYP_REMOTE)
+            data.setData(DATA_ADDR, address)
+            data.setData(DATA_NAME, name)
+            data.setData(DATA_INFO, info)
             self.discoveryList.setItem(rowPosition , 0, data)
             self.discoveryList.setItem(rowPosition , 1, QTableWidgetItem(name.split('.')[0]))
             self.discoveryList.setItem(rowPosition , 2, QTableWidgetItem(info.properties.get(b"Version").decode('utf-8')))
-
-    def enableDiscoveryButton(self, enabled):
-        self.discoveryBrowser.setEnabled(enabled)
-        self.uploadOverTheAirButton.setEnabled(enabled)
-        self.DTversionBox.setEnabled(enabled)
-        self.enableLoggingButton.setEnabled(enabled)
+        except:
+            print("Error")
 
 
-
-    @QtCore.Slot()
-    def on_uploadOverTheAirButton_clicked(self):
-        try:
-            progress = self.uploadProgress
-            version = self.DTversionBox.currentText()
-            sel = self.DTversionBox.model().item(
-                self.DTversionBox.currentIndex())
-            if sel:
-                orig_version = sel.text()
-            else:
-                orig_version = ''
-
-            if version == orig_version:
-                # Editable combobox has been unchanged
-                binary_uri = self.DTversionBox.currentData(ROLE_DEVICE)
-            elif version.startswith(ALLOWED_PROTO):
-                # User has provided a download URL
-                binary_uri = version
-            elif os.path.exists(version):
-                binary_uri = version
-            else:
-                self.statusbar.showMessage(self.tr("Invalid version / file does not exist"))
-                return
-        
-            if binary_uri.startswith(ALLOWED_PROTO):
-                binary_uri = self.cache_download(progress, binary_uri)
-
-            QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
-            data = self.discoveryList.selectionModel().selectedRows()[0]
-            url = "http://"  + data.data(ROLE_DNSSD_ADDR) + "/firmware" 
-            auth=HTTPBasicAuth('admin', 'admin')
-            files = {'file': open(binary_uri,'rb')}
-            values = {}
-            progress.emit(self.tr('Uploading...'), 1)
-            r = requests.post(url, files=files, data=values,auth=auth)
-            if (r.status_code == 200):
-                string = re.sub('<.*?>', '', r.text)
-                progress.emit(self.tr("Finish. {text}").format(text=string), 100)
-            else:
-                progress.emit(self.tr('Error {code} : {text}').format(code = str(status_code), text = r.text), 1)
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor() 
+    def enableDiscoveryButton(self, selectedTyp):
+        self.discoveryBrowser.setEnabled(selectedTyp == TYP_REMOTE)
+        self.flashButton.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
+        self.eraseButton.setEnabled(selectedTyp == TYP_USB)
+        #self.versionBox.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
+        self.enableLoggingButton.setEnabled(selectedTyp == TYP_REMOTE)
+        #self.fileopenButton.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
+        self.serialConnectButton.setEnabled(selectedTyp == TYP_USB)
 
     @QtCore.Slot()
     def on_discoveryBrowser_clicked(self):
         data = self.discoveryList.selectionModel().selectedRows()[0]
-        url = "http://"  + data.data(ROLE_DNSSD_ADDR) 
+        url = "http://"  + data.data(DATA_ADDR) 
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
     @QtCore.Slot()
     def on_enableLoggingButton_clicked(self):
         data = self.discoveryList.selectionModel().selectedRows()[0]
-        url = "http://"  + data.data(ROLE_DNSSD_ADDR) + "/set?id=sys&key=log&value=bcast"
+        url = "http://"  + data.data(DATA_ADDR) + "/set?id=sys&key=log&value=bcast"
         r = requests.get(url)
         if (r.status_code == 200):
             self.statusbar.showMessage(self.tr("Started."))
         else:
             self.statusbar.showMessage(self.tr('Error {code} : {text}').format(code = str(status_code), text = r.text))
-        
-
-
 
     @QtCore.Slot()
     def on_discoveryList_itemSelectionChanged(self):
         rows = self.discoveryList.selectionModel().selectedRows()
-        self.enableDiscoveryButton(len(rows) > 0)
+        typ = rows[0].data(ROLE_DEVICE) if (len(rows) > 0) else TYP_UNKNOWN
+        self.enableDiscoveryButton(typ)
+
 
     @QtCore.Slot()
-    def on_eraseButton_clicked(self):
-        self.statusbar.clearMessage()
-        device = self.boardBox.currentData(ROLE_DEVICE)
-
-        if not device:
-            self.statusbar.showMessage(self.tr("No device selected."))
-            return
-
-        if self.erase_board.running():
-            self.statusbar.showMessage(self.tr("Erasing in progress..."))
-            return
-
-        self.erase_board(self.uploadProgress, device,
-                         error=self.errorSignal)
+    def on_fileopenButton_clicked(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Firmware (*.bin);;All Files (*)", options=options)
+        if fileName:
+            item = QtGui.QStandardItem("File: " + fileName)
+            item.setData(fileName, ROLE_DEVICE)
+            self.versionBox.model().insertRow(0, item)
+            self.versionBox.setCurrentIndex(0)
+            # idx = self.versionBox.currentIndex()
+            # self.versionBox.selected
+            # print(idx)
+            # self.versionBox.setText(filename)
 
     @QtCore.Slot()
     def on_discoveryRefreshButton_clicked(self):
         self.discovery_start()
+        self.port_detect.restart()
 
 
 if __name__ == "__main__":
