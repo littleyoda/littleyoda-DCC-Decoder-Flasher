@@ -54,5 +54,26 @@ jobs:
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
         file: dist\littleyoda-DCC-Decoder-Flasher.exe
-        asset_name: Windows_littleyoda_flasher.exe
+        asset_name: Windows_littleyoda_flasher_64.exe
+        tag: ${{ github.ref }} 
+
+  buildWindows32:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+    - name: Make
+      run: |
+        deploy/windows-build32.bat
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v1-release
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist\littleyoda-DCC-Decoder-Flasher.exe
+        asset_name: Windows_littleyoda_flasher_32.exe
         tag: ${{ github.ref }} 
