@@ -17,6 +17,7 @@ PREFERED_PORTS = [
 
     # CP2102
     (0x10c4, 0xea60),
+    (0x0403, 0x6001)
 ]
 
 ROLE_DEVICE = QtCore.Qt.UserRole + 1

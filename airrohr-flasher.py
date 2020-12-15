@@ -9,6 +9,7 @@ import hashlib
 import zlib
 import logging
 import re
+import zipfile
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -79,9 +80,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
         self.uploadProgress.connect(self.on_work_update)
         self.errorSignal.connect(self.on_work_error)
-
         self.cachedir = tempfile.TemporaryDirectory()
-
         self.serial = None
 
 
@@ -163,8 +162,11 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         #self.boardBox.clear()
 
         prefered, others = self.group_ports(ports)
+        for b in others:
+            print("Filtered: " + str(b))
 
         for b in prefered:
+            print("Found: " + str(b))
             rowPosition = self.discoveryList.rowCount()
             self.discoveryList.insertRow(rowPosition)
             data = QTableWidgetItem(b.device)
@@ -331,9 +333,20 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                     binary_uri = self.cache_download(progress, binary_uri)
 
                 QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
+                info = data.data(DATA_INFO)
+
+                flashModus = ""
+                if b'FlashModus' in info.properties:
+                    flashModus =  info.properties.get(b'FlashModus')
+
+
                 url = "http://"  + data.data(DATA_ADDR) + "/firmware" 
                 auth=HTTPBasicAuth('admin', 'admin')
-                files = {'file': open(binary_uri,'rb')}
+                if (flashModus == "Arduino_Esp8266_2.6"):
+                    files = {'firmware': open(binary_uri,'rb')}
+                elif (flashModus == "Arduino_Esp8266_2.5" or flashModus == ""):
+                    files = {'file': open(binary_uri,'rb')}
+
                 values = {}
                 progress.emit(self.tr('Uploading...'), 1)
                 r = requests.post(url, files=files, data=values,auth=auth)
@@ -341,7 +354,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                     string = re.sub('<.*?>', '', r.text)
                     progress.emit(self.tr("Finish. {text}").format(text=string), 100)
                 else:
-                    progress.emit(self.tr('Error {code} : {text}').format(code = str(status_code), text = r.text), 1)
+                    progress.emit(self.tr('Error {code} : {text}').format(code = str(r.status_code), text = r.text), 1)
             finally:
                 QtWidgets.QApplication.restoreOverrideCursor() 
 
@@ -414,17 +427,40 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         esp = esp.run_stub()
         esp.change_baud(baudrate)
 
-        with open(binary_uri, 'rb') as fd:
-            uncimage = fd.read()
 
+        t = time.time()
+        if zipfile.is_zipfile(binary_uri):
+            with zipfile.ZipFile(binary_uri) as myzip:
+                for fname in myzip.namelist():
+                    if fname.startswith("0x"):
+                        addr = int(fname, 16)
+                        with myzip.open(fname) as myfile:
+                            data = myfile.read()
+                            print("Segment: " + fname + " / " + str(addr) + " Size: " + str(len(data)))
+                            self.flashBlock(data, progress, esp, addr)
+                    else:
+                        print("Cannot handle " + fname)
+
+        else:
+            with open(binary_uri, 'rb') as fd:
+                uncimage = fd.read()
+            self.flashBlock(uncimage, progress, esp, 0x0)
+        t = time.time() - t
+
+
+        esp.flash_finish(True)
+
+        progress.emit(self.tr(
+            'Finished in {time:.2f} seconds.').format(
+                time=t), 100)
+
+
+    def flashBlock(self, uncimage, progress, esp, address):
         image = zlib.compress(uncimage, 9)
 
-        address = 0x0
         blocks = esp.flash_defl_begin(len(uncimage), len(image), address)
-
         seq = 0
         written = 0
-        t = time.time()
         while len(image) > 0:
             current_addr = address + seq * esp.FLASH_WRITE_SIZE
             progress.emit(self.tr('Writing at 0x{address:08x}...').format(
@@ -436,13 +472,8 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             image = image[esp.FLASH_WRITE_SIZE:]
             seq += 1
             written += len(block)
-        t = time.time() - t
 
-        progress.emit(self.tr(
-            'Finished in {time:.2f} seconds. Sensor ID: {sensor_id}').format(
-                time=t, sensor_id=esp.chip_id()), 100)
 
-        esp.flash_finish(True)
 
 
     # Zeroconf page
@@ -527,7 +558,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
     def on_fileopenButton_clicked(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Firmware (*.bin);;All Files (*)", options=options)
+        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Fimrware (*.bin *.ly32);;ESP8266 Firmware (*.bin);;ESP32 Firmware (*.ly32);;All Files (*)", options=options)
         if fileName:
             item = QtGui.QStandardItem("File: " + fileName)
             item.setData(fileName, ROLE_DEVICE)
