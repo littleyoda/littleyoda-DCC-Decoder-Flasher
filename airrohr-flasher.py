@@ -10,6 +10,9 @@ import zlib
 import logging
 import re
 import zipfile
+import base64
+import os
+
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -163,6 +166,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
         prefered, others = self.group_ports(ports)
         for b in others:
+            self.statusbar.showMessage("Not Supported: %s:%s %s" %(hex(b.vid), hex(b.pid), str(b)) )
             print("Filtered: " + str(b))
 
         for b in prefered:
@@ -260,6 +264,51 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             text = self.serial.readLine().data().decode()
             text = text.rstrip('\r\n')
             self.serialTextEdit.append(text)
+
+    @QtCore.Slot()
+    def on_fileuploadButton_clicked(self):
+            self.statusbar.showMessage(self.tr("Villeicht"))
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Config-File (config.json);;CSS-File (*.css);;All Files (*)", options=options)
+            if fileName:
+                print(fileName)
+                data = self.discoveryList.selectionModel().selectedRows()[0]
+                device = data.data(DATA_ADDR)
+                print(device)
+                with serial.Serial(device, 115200, timeout=3) as ser:
+                    ser.write("xdebug".encode('utf-8'))
+                    s = ser.readline().decode('utf-8').rstrip('\r\n')
+                    print(s)
+                    if (s != "Debugmodus aktiviert"):                
+                        s = ser.readline().decode('utf-8').rstrip('\r\n')
+                    print(s)
+                    if (s != "Debugmodus aktiviert"):               
+                        self.statusbar.showMessage(self.tr("Aktivierung des Debugmodus fehlgeschlagen!"))
+                        return
+                    ser.write("_".encode('utf-8'))
+                    s = ser.readline().decode('utf-8').rstrip('\r\n')
+                    if (s != "TRANSFER ACTIVE"):               
+                        self.statusbar.showMessage(self.tr("Aktivierung des Transfers fehlgeschlagen!"))
+                        return
+                    with open(fileName, "rb") as f:
+                        size = os.fstat(f.fileno()).st_size
+                        b64 = base64.b64encode(f.read())
+                        s = "PUT " + str(size) + " config.json\r\n"
+                        ser.write(s.encode('iso-8859-1'))
+                        print(b64)
+                        print(s)
+                        print("Len " + str(len(b64)))
+                        count =ser.write(b64)
+                        print("Writting " + str(count) 
+                               +" bytes (expected: " + str(len(b64)))
+                        ser.flush()
+                        s = ser.readline().decode('utf-8').rstrip('\r\n')
+                        print(s)
+                        s = ser.readline().decode('utf-8').rstrip('\r\n')
+                        print(s)
+                    ser.write("x".encode('utf-8'))
+                    s = ser.readline().decode('utf-8').rstrip('\r\n')
 
     @QtCore.Slot()
     def on_flashButton_clicked(self):
@@ -526,9 +575,11 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.discoveryBrowser.setEnabled(selectedTyp == TYP_REMOTE)
         self.flashButton.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
         self.eraseButton.setEnabled(selectedTyp == TYP_USB)
+        self.fileuploadButton.setEnabled(selectedTyp == TYP_USB)
+        self.fileuploadButton.hide()
         #self.versionBox.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
         self.enableLoggingButton.setEnabled(selectedTyp == TYP_REMOTE)
-        #self.fileopenButton.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
+        #self.fileopenButton.setEnabled(selectedTyp == TYP_USB)
         self.serialConnectButton.setEnabled(selectedTyp == TYP_USB)
 
     @QtCore.Slot()
