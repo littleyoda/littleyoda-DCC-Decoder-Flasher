@@ -23,8 +23,7 @@ jobs:
       run: |
         cat /etc/lsb-release 
         sudo apt-get update -qq
-        sudo apt-get install -qq qtbase5-dev qtdeclarative5-dev libqt5webkit5-dev qt5-default
-        sudo apt-get install qttools5-dev-tools make
+        sudo apt-get install -qq qtbase5-dev qtdeclarative5-dev libqt5webkit5-dev qt5-default qttools5-dev-tools make pyqt5-dev-tools
     - name: Make
       run: |
         make deps dist
