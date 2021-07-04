@@ -34,6 +34,33 @@ jobs:
         file: dist/littleyoda-DCC-Decoder-Flasher
         asset_name: Linux_littleyoda_flasher
         tag: ${{ github.ref }} 
+    
+  buildLinuxOld:
+
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+    - name: Install
+      run: |
+        cat /etc/lsb-release 
+        sudo apt-get update -qq
+        sudo apt-get install -qq qtbase5-dev qtdeclarative5-dev libqt5webkit5-dev qt5-default qttools5-dev-tools make pyqt5-dev-tools
+    - name: Make
+      run: |
+        make deps dist
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v1-release
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist/littleyoda-DCC-Decoder-Flasher
+        asset_name: Linux_littleyoda_flasher_old_Glib
+        tag: ${{ github.ref }} 
+
 
   buildWindows:
 

@@ -588,7 +588,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         url = "http://"  + data.data(DATA_ADDR) 
         QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
 
-    @QtCore.Slot()
+    @QtCore.Slot()  
     def on_enableLoggingButton_clicked(self):
         data = self.discoveryList.selectionModel().selectedRows()[0]
         url = "http://"  + data.data(DATA_ADDR) + "/set?id=sys&key=log&value=bcast"
