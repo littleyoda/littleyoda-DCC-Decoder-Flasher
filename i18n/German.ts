@@ -140,7 +140,7 @@
     <message>
         <location filename="../gui/mainwindow.py" line="242"/>
         <source>In case of sensor issues, Serial Monitor can be used to review logs sent by the sensor over USB cable.</source>
-        <translation>Serieller Monitor, um die Ausgabe des ESP anzeigen zu lassen.</translation>
+        <translation>Serieller Monitor, um die Ausgabe des ESP anzeigen zu lassen. (USB Verbindung notwendig)</translation>
     </message>
     <message>
         <location filename="../gui/mainwindow.py" line="243"/>

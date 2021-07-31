@@ -265,9 +265,55 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             text = text.rstrip('\r\n')
             self.serialTextEdit.append(text)
 
+    @QuickThread.wrap
+    def uploadConfig_thread(self, progress, device, baudrate=460800):
+        self.statusbar.clearMessage()
+        esp = self.espconnect(progress, device)
+        buf = esp.read_flash(0x8000, 0xC00)
+    # print_overwrite('Read %d bytes at 0x%x in %.1f seconds (%.1f kbit/s)...'
+    #                 % (len(data), args.address, t, len(data) / t * 8 / 1000), last_line=True)
+        with open("/tmp/tmp", 'wb') as f:
+          f.write(buf)
+        for o in range(0,len(buf),32):
+            data = buf[o:o+32]
+            if len(data) != 32:
+                print("Partition table length must be a multiple of 32 bytes")
+                return
+            if data == b'\xFF'*32:
+                break  # got end marker
+            print(data)
+
+
+
+
+    @QtCore.Slot()
+    def on_uploadConfig_clicked(self):
+        if self.uploadConfig_thread.running():
+            self.statusbar.showMessage(self.tr("Erasing in progress..."))
+            return
+        if len(self.discoveryList.selectionModel().selectedRows()) == 0:
+            self.statusbar.showMessage(self.tr("Kein Gerät ausgewählt"))
+            return
+
+        data = self.discoveryList.selectionModel().selectedRows()[0]
+        typ = data.data(ROLE_DEVICE)
+        if (typ != TYP_USB):
+            self.statusbar.showMessage(self.tr("Not via USB connected."))
+            return
+        device = data.data(DATA_ADDR)
+        if not device:
+                self.statusbar.showMessage(self.tr("No device selected."))
+                return
+
+        self.uploadConfig_thread(self.uploadProgress, device)
+        print("yes")
+
+
+
+
     @QtCore.Slot()
     def on_fileuploadButton_clicked(self):
-            self.statusbar.showMessage(self.tr("Villeicht"))
+            self.statusbar.showMessage(self.tr("Upload started"))
             options = QFileDialog.Options()
             options |= QFileDialog.DontUseNativeDialog
             fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Config-File (config.json);;CSS-File (*.css);;All Files (*)", options=options)
@@ -276,13 +322,13 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                 data = self.discoveryList.selectionModel().selectedRows()[0]
                 device = data.data(DATA_ADDR)
                 print(device)
-                with serial.Serial(device, 115200, timeout=3) as ser:
+                with serial.Serial(device, 115200, timeout=10) as ser:
                     ser.write("xdebug".encode('utf-8'))
                     s = ser.readline().decode('utf-8').rstrip('\r\n')
-                    print(s)
+                    print("From ESP>" + s)
                     if (s != "Debugmodus aktiviert"):                
                         s = ser.readline().decode('utf-8').rstrip('\r\n')
-                    print(s)
+                    print("From ESP>" + s)
                     if (s != "Debugmodus aktiviert"):               
                         self.statusbar.showMessage(self.tr("Aktivierung des Debugmodus fehlgeschlagen!"))
                         return
@@ -296,17 +342,23 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
                         b64 = base64.b64encode(f.read())
                         s = "PUT " + str(size) + " config.json\r\n"
                         ser.write(s.encode('iso-8859-1'))
-                        print(b64)
+                        # print(b64)
                         print(s)
                         print("Len " + str(len(b64)))
                         count =ser.write(b64)
                         print("Writting " + str(count) 
-                               +" bytes (expected: " + str(len(b64)))
+                               +" bytes (expected: " + str(len(b64))+ ")")
                         ser.flush()
-                        s = ser.readline().decode('utf-8').rstrip('\r\n')
-                        print(s)
-                        s = ser.readline().decode('utf-8').rstrip('\r\n')
-                        print(s)
+                        for x in range(0, 10):
+                            s = ser.readline().decode('utf-8').rstrip('\r\n')
+                            print("3: " + s)
+                            if (s == "STATUS: FINISH"):
+                                self.statusbar.showMessage(self.tr("Upload vollständig!"))
+                                break
+                            if (s.startswith("STATUS: FAILED")):
+                                self.statusbar.showMessage(self.tr("Upload fehlerhaft! (" + s + ")"))
+                                break
+                    print("closed")
                     ser.write("x".encode('utf-8'))
                     s = ser.readline().decode('utf-8').rstrip('\r\n')
 
@@ -436,7 +488,6 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
     @QuickThread.wrap
     def erase_board(self, progress, device, baudrate=460800):
-
         progress.emit(self.tr('Connecting...'), 0)
         init_baud = min(ESPLoader.ESP_ROM_BAUD, baudrate)
         esp = ESPLoader.detect_chip(device, init_baud, 'default_reset', False)
@@ -503,6 +554,17 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             'Finished in {time:.2f} seconds.').format(
                 time=t), 100)
 
+    def espconnect(self, progress, device, baudrate=460800):
+        progress.emit(self.tr('Connecting...'), 0)
+
+        init_baud = min(ESPLoader.ESP_ROM_BAUD, baudrate)
+        esp = ESPLoader.detect_chip(device, init_baud, 'default_reset', False)
+
+        progress.emit(self.tr('Connected. Chip type: {chip_type}').format(
+                      chip_type=esp.get_chip_description()), 0)
+        esp = esp.run_stub()
+        esp.change_baud(baudrate)
+        return esp
 
     def flashBlock(self, uncimage, progress, esp, address):
         image = zlib.compress(uncimage, 9)
@@ -576,7 +638,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         self.flashButton.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
         self.eraseButton.setEnabled(selectedTyp == TYP_USB)
         self.fileuploadButton.setEnabled(selectedTyp == TYP_USB)
-        self.fileuploadButton.hide()
+   #TODO     self.fileuploadButton.hide()
         #self.versionBox.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
         self.enableLoggingButton.setEnabled(selectedTyp == TYP_REMOTE)
         #self.fileopenButton.setEnabled(selectedTyp == TYP_USB)
