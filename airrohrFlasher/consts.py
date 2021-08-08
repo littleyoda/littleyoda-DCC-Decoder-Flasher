@@ -5,6 +5,7 @@ from .qtvariant import QtCore
 
 # Firmware update repository
 UPDATE_REPOSITORY = 'https://raw.githubusercontent.com/littleyoda/littleyoda-DCC-Decoder/flashinfo/flash.json'
+UPDATE_SUPPORTFILES = 'https://raw.githubusercontent.com/littleyoda/littleyoda-DCC-Decoder/flashinfo/supportfiles.json'
 
 
 # URI prefixes (protocol parts, essentially) to be downloaded using requests

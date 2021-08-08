@@ -14,7 +14,7 @@ from contextlib import closing
 
 def indexof(url):
     r = requests.get(url=url)
-    json = r.json();
+    json = r.json()
     data = [ [item['board'], item['version'], item['url']] for item in json['firmware']]
     return data
 

@@ -13,13 +13,15 @@ import zipfile
 import base64
 import os
 
-
+from datetime import datetime
 import requests
 from requests.auth import HTTPBasicAuth
 import serial
 from esptool import ESPLoader, erase_flash
 
 import airrohrFlasher
+import random
+ 
 
 from airrohrFlasher.qtvariant import QtGui, QtCore, QtWidgets, QtSerialPort
 from PyQt5.QtWidgets import QTableWidget,QTableWidgetItem,QFileDialog,QStyle
@@ -30,7 +32,7 @@ from airrohrFlasher.workers import PortDetectThread, FirmwareListThread, \
 
 from gui import mainwindow
 
-from airrohrFlasher.consts import UPDATE_REPOSITORY, ALLOWED_PROTO, \
+from airrohrFlasher.consts import UPDATE_REPOSITORY, UPDATE_SUPPORTFILES, ALLOWED_PROTO, \
     PREFERED_PORTS, ROLE_DEVICE, DRIVERS_URL, DATA_ADDR,DATA_INFO, DATA_NAME, TYP_REMOTE, TYP_USB, TYP_UNKNOWN
 
 if getattr(sys, 'frozen', False):
@@ -182,12 +184,6 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             self.discoveryList.setItem(rowPosition , 1, QTableWidgetItem(b.description))
             self.discoveryList.setItem(rowPosition , 2, QTableWidgetItem(""))
 
-    #TODO
-    #     if not prefered:
-#            sep = QtGui.QStandardItem(self.tr('No boards found'))
- ##           sep.setEnabled(False)
-   #         self.boardBox.model().appendRow(sep)
-
             # No prefered boards has been found so far and there is a
             # suggested driver download URL available
             if not self.boards_detected and DRIVERS_URL:
@@ -258,6 +254,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         else:
             self.statusbar.showMessage(self.tr("Error while opening com port."))
 
+
     @QtCore.Slot()
     def receive(self):
         while self.serial.canReadLine():
@@ -265,102 +262,170 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             text = text.rstrip('\r\n')
             self.serialTextEdit.append(text)
 
+
+    def upload(self, device, content, size, filename):
+        with serial.Serial(device, 115200, timeout=1) as ser:
+            ser.write("xdebug".encode('utf-8'))
+            s = ser.readline().decode('utf-8').rstrip('\r\n')
+            print("From ESP>" + s)
+            if (s != "Debugmodus aktiviert"):                
+                s = ser.readline().decode('utf-8').rstrip('\r\n')
+                print("From ESP>" + s)
+            if (s != "Debugmodus aktiviert"):               
+                self.statusbar.showMessage(self.tr("Aktivierung des Debugmodus fehlgeschlagen!"))
+                return False
+            ser.write("_".encode('utf-8'))
+            s = ser.readline().decode('utf-8').rstrip('\r\n')
+            print("From ESP>" + s)
+            if (s != "TRANSFER ACTIVE"):               
+                self.statusbar.showMessage(self.tr("Aktivierung des Transfers fehlgeschlagen!"))
+                return False
+            b64 = base64.b64encode(content)
+            s = "PUT " + str(len(b64)) + " " + filename + "\r\n"
+            ser.write(s.encode('iso-8859-1'))
+            # print(b64)
+            print(s)
+            print("Len " + str(len(b64)))
+            currentSegment = 0
+            finish = False
+            while not finish:
+                print(filename + " Sending: " + str(currentSegment) + " => " + str(b64[currentSegment:500 + currentSegment]))
+                ser.write(b64[currentSegment:500 + currentSegment])
+                ser.flush()
+                err = 0
+                while not finish:
+                  s = ser.readline().decode('utf-8').rstrip('\r\n')
+                  print("3: " + s)
+                  if (s == ""):
+                      err = err + 1
+                  if (err > 5):
+                      self.statusbar.showMessage(self.tr("ESP antwortet nicht"))
+                      return
+                  if (s.startswith("SEGMENT OK ")):
+                      currentSegment += 500
+                      self.statusbar.showMessage(filename + " " + self.tr("Sending: " + str(currentSegment)))
+                      break
+                  if (s.startswith("SEGMENT FAIL ")):
+                     self.statusbar.showMessage(self.tr("Resending"))
+                     break
+                  if (s.startswith("TRANSFER END")):
+                      finish = True
+                      self.statusbar.showMessage(self.tr("Transfer fertig!"))
+                      break
+            ser.write("x".encode('utf-8'))
+            s = ser.readline().decode('utf-8').rstrip('\r\n')
+            return True
+
     @QuickThread.wrap
-    def uploadConfig_thread(self, progress, device, baudrate=460800):
-        self.statusbar.clearMessage()
-        esp = self.espconnect(progress, device)
-        buf = esp.read_flash(0x8000, 0xC00)
-    # print_overwrite('Read %d bytes at 0x%x in %.1f seconds (%.1f kbit/s)...'
-    #                 % (len(data), args.address, t, len(data) / t * 8 / 1000), last_line=True)
-        with open("/tmp/tmp", 'wb') as f:
-          f.write(buf)
-        for o in range(0,len(buf),32):
-            data = buf[o:o+32]
-            if len(data) != 32:
-                print("Partition table length must be a multiple of 32 bytes")
-                return
-            if data == b'\xFF'*32:
-                break  # got end marker
-            print(data)
+    def uploadFilesRemote(self, progress, ip, files):
+        idx = 0
+        count = len(files)
+        steps = int(100.0/count/2.0)
+        status = 0
+        for x in files:
+            fname = os.path.basename(x)            
 
+            progress.emit(self.tr('Downloading {filename} ({idx}/{count}) ...').format(filename=fname, idx=idx, count=count), status)
+            u = requests.get(url=x)
+            if (u.status_code != 200):
+                self.uploadProgress.emit(self.tr('Download fehlgeschlagen!'), 0)
+            status = status + steps
+
+            progress.emit(self.tr('Uploading {filename} ({idx}/{count}) ...').format(filename=fname, idx=idx, count=count), status)
+            r = requests.post("http://" + ip + "/upload", files={fname: u.content})
+            print(u.status_code)
+            status = status + steps
+            idx = idx + 1
+        progress.emit(self.tr('Finish'), 100)
 
 
 
     @QtCore.Slot()
-    def on_uploadConfig_clicked(self):
-        if self.uploadConfig_thread.running():
-            self.statusbar.showMessage(self.tr("Erasing in progress..."))
-            return
-        if len(self.discoveryList.selectionModel().selectedRows()) == 0:
-            self.statusbar.showMessage(self.tr("Kein Gerät ausgewählt"))
-            return
+    def on_uploadSupportRemote_clicked(self):
+        try:
+            r = requests.get(url=UPDATE_SUPPORTFILES)
+            print(r.text)
+            json = r.json()
+            idx = 0
+            data = self.discoveryList.selectionModel().selectedRows()[0]
+            ip = data.data(DATA_ADDR) 
+            if self.uploadFilesRemote.running():
+                self.statusbar.showMessage(self.tr("Work in progess..."))
+                return
+            self.uploadFilesRemote(self.uploadProgress, ip, json["files"])
 
+        except Exception as e:
+            self.uploadProgress.emit(self.tr('Fehler: ' + str(e)) , 100)
+
+    @QtCore.Slot()
+    def on_uploadConfigRemote_clicked(self):
         data = self.discoveryList.selectionModel().selectedRows()[0]
-        typ = data.data(ROLE_DEVICE)
-        if (typ != TYP_USB):
-            self.statusbar.showMessage(self.tr("Not via USB connected."))
-            return
-        device = data.data(DATA_ADDR)
-        if not device:
-                self.statusbar.showMessage(self.tr("No device selected."))
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Config-File (config.json);;CSS-File (*.css);;All Files (*)", options=options)
+        if fileName:
+            data = self.discoveryList.selectionModel().selectedRows()[0]
+            ip = data.data(DATA_ADDR) 
+            print(ip)
+            self.uploadProgress.emit(self.tr('Uploading to ') + ip , 0)
+            #
+            # files = {'Datei': open('report.xls', 'rb')}
+            with open(fileName, 'rb') as f:
+                r = requests.post("http://" + ip + "/upload", files={'datei': f})
+                print(r.text)
+                print(r.status_code)
+                if (r.status_code == 200):
+                    self.uploadProgress.emit(self.tr('Finish ') + fileName , 100)
+                else:
+                    self.uploadProgress.emit(self.tr('Upload fehlgeschlagen') , 0)
+
+    @QuickThread.wrap
+    def uploadFilesUSB(self, progress, device, files):
+        idx = 0
+        count = len(files)
+        steps = int(100.0/count/2.0)
+        status = 0
+        for x in files:
+            fname = os.path.basename(x)            
+
+            progress.emit(self.tr('Downloading {filename} ({idx}/{count}) ...').format(filename=fname, idx=idx, count=count), status)
+            u = requests.get(url=x)
+            status = status + steps
+
+            progress.emit(self.tr('Uploading {filename} ({idx}/{count}) ...').format(filename=fname, idx=idx, count=count), status)
+            if not self.upload(device, u.content, len(u.content), fname):
                 return
-
-        self.uploadConfig_thread(self.uploadProgress, device)
-        print("yes")
-
-
+            status = status + steps
+            idx = idx + 1
+        progress.emit(self.tr('Finish'), 100)
 
 
     @QtCore.Slot()
-    def on_fileuploadButton_clicked(self):
+    def on_uploadSupportFiles_clicked(self):
+        data = self.discoveryList.selectionModel().selectedRows()[0]
+        device = data.data(DATA_ADDR)
+        r = requests.get(url=UPDATE_SUPPORTFILES)
+        print(r.text)
+        json = r.json()
+        if self.uploadFilesUSB.running():
+                self.statusbar.showMessage(self.tr("Work in progess..."))
+                return
+        self.uploadFilesUSB(self.uploadProgress, device, json["files"])
+
+    @QtCore.Slot()
+    def on_uploadConfigFile_clicked(self):
             self.statusbar.showMessage(self.tr("Upload started"))
             options = QFileDialog.Options()
             options |= QFileDialog.DontUseNativeDialog
             fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Config-File (config.json);;CSS-File (*.css);;All Files (*)", options=options)
             if fileName:
-                print(fileName)
                 data = self.discoveryList.selectionModel().selectedRows()[0]
                 device = data.data(DATA_ADDR)
-                print(device)
-                with serial.Serial(device, 115200, timeout=10) as ser:
-                    ser.write("xdebug".encode('utf-8'))
-                    s = ser.readline().decode('utf-8').rstrip('\r\n')
-                    print("From ESP>" + s)
-                    if (s != "Debugmodus aktiviert"):                
-                        s = ser.readline().decode('utf-8').rstrip('\r\n')
-                    print("From ESP>" + s)
-                    if (s != "Debugmodus aktiviert"):               
-                        self.statusbar.showMessage(self.tr("Aktivierung des Debugmodus fehlgeschlagen!"))
-                        return
-                    ser.write("_".encode('utf-8'))
-                    s = ser.readline().decode('utf-8').rstrip('\r\n')
-                    if (s != "TRANSFER ACTIVE"):               
-                        self.statusbar.showMessage(self.tr("Aktivierung des Transfers fehlgeschlagen!"))
-                        return
-                    with open(fileName, "rb") as f:
-                        size = os.fstat(f.fileno()).st_size
-                        b64 = base64.b64encode(f.read())
-                        s = "PUT " + str(size) + " config.json\r\n"
-                        ser.write(s.encode('iso-8859-1'))
-                        # print(b64)
-                        print(s)
-                        print("Len " + str(len(b64)))
-                        count =ser.write(b64)
-                        print("Writting " + str(count) 
-                               +" bytes (expected: " + str(len(b64))+ ")")
-                        ser.flush()
-                        for x in range(0, 10):
-                            s = ser.readline().decode('utf-8').rstrip('\r\n')
-                            print("3: " + s)
-                            if (s == "STATUS: FINISH"):
-                                self.statusbar.showMessage(self.tr("Upload vollständig!"))
-                                break
-                            if (s.startswith("STATUS: FAILED")):
-                                self.statusbar.showMessage(self.tr("Upload fehlerhaft! (" + s + ")"))
-                                break
-                    print("closed")
-                    ser.write("x".encode('utf-8'))
-                    s = ser.readline().decode('utf-8').rstrip('\r\n')
+                with open(fileName, "rb") as f:
+                    size = os.fstat(f.fileno()).st_size
+                    content = f.read()
+                    self.upload(device, content, size, "config.json")
+
 
     @QtCore.Slot()
     def on_flashButton_clicked(self):
@@ -604,12 +669,11 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
 
     def on_logmessage_received(self, addr, data):
-        print(data)
-        print(addr)
+        now = datetime.now()
         rowPosition = 0 # self.logTable.rowCount()
         self.logTable.insertRow(rowPosition)
 
-        self.logTable.setItem(rowPosition , 0, QTableWidgetItem(""))
+        self.logTable.setItem(rowPosition , 0, QTableWidgetItem(now.strftime("%H:%M:%S")))
         self.logTable.setItem(rowPosition , 1, QTableWidgetItem(data))
         self.logTable.setItem(rowPosition , 2, QTableWidgetItem(addr))
 
@@ -634,15 +698,9 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
 
     def enableDiscoveryButton(self, selectedTyp):
-        self.discoveryBrowser.setEnabled(selectedTyp == TYP_REMOTE)
-        self.flashButton.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
-        self.eraseButton.setEnabled(selectedTyp == TYP_USB)
-        self.fileuploadButton.setEnabled(selectedTyp == TYP_USB)
-   #TODO     self.fileuploadButton.hide()
-        #self.versionBox.setEnabled(selectedTyp == TYP_REMOTE or selectedTyp == TYP_USB)
-        self.enableLoggingButton.setEnabled(selectedTyp == TYP_REMOTE)
-        #self.fileopenButton.setEnabled(selectedTyp == TYP_USB)
+        self.flashTab.setEnabled(selectedTyp == TYP_USB)
         self.serialConnectButton.setEnabled(selectedTyp == TYP_USB)
+        self.remoteTab.setEnabled(selectedTyp == TYP_REMOTE)
 
     @QtCore.Slot()
     def on_discoveryBrowser_clicked(self):
@@ -656,7 +714,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
         url = "http://"  + data.data(DATA_ADDR) + "/set?id=sys&key=log&value=bcast"
         r = requests.get(url)
         if (r.status_code == 200):
-            self.statusbar.showMessage(self.tr("Started."))
+            self.statusbar.showMessage(self.tr("Remote Loggin started."))
         else:
             self.statusbar.showMessage(self.tr('Error {code} : {text}').format(code = str(status_code), text = r.text))
 
@@ -677,10 +735,7 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
             item.setData(fileName, ROLE_DEVICE)
             self.versionBox.model().insertRow(0, item)
             self.versionBox.setCurrentIndex(0)
-            # idx = self.versionBox.currentIndex()
-            # self.versionBox.selected
-            # print(idx)
-            # self.versionBox.setText(filename)
+
 
     @QtCore.Slot()
     def on_discoveryRefreshButton_clicked(self):

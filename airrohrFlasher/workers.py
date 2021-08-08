@@ -77,5 +77,5 @@ class LogListenerThread(QuickThread):
         serverSock.bind(("0.0.0.0", 5514))
         while True:
                 data, addr = serverSock.recvfrom(1024) # buffer size is 1024 bytes   
-                self.logReceived.emit(data.decode("iso8859"), addr[0])
+                self.logReceived.emit(data.decode("utf-8"), addr[0])
 
