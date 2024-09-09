@@ -168,9 +168,13 @@ class MainWindow(QtWidgets.QMainWindow, mainwindow.Ui_MainWindow):
 
         prefered, others = self.group_ports(ports)
         for b in others:
-            self.statusbar.showMessage("Not Supported: %s:%s %s" %(hex(b.vid), hex(b.pid), str(b)) )
-            print("Filtered: " + str(b))
-
+            try:
+                self.statusbar.showMessage("Not Supported: %s:%s %s" %(hex(b.vid), hex(b.pid), str(b)) )
+                print("Filtered: " + str(b))
+            except Exception:
+                print("Filtered: " + str(b))
+                pass
+                
         for b in prefered:
             print("Found: " + str(b))
             rowPosition = self.discoveryList.rowCount()
